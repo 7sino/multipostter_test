@@ -1,5 +1,7 @@
 # multipostter
 
+multi-post tool: from misskey.io to bluesky / Twitter
+
 - install pnpm
 - check your Architecture (ARM or x86)
   - if your architecture is not ARM, modify Lambda's param in `lib/multipostter-stack.ts`
