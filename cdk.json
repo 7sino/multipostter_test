@@ -1,5 +1,5 @@
 {
-  "app": "pnpx tsx bin/multipostter.ts",
+  "app": "pnpx tsx bin/mpost.ts",
   "watch": {
     "include": ["**"],
     "exclude": [

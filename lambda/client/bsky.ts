@@ -1,5 +1,5 @@
 // https://github.com/bluesky-social/atproto/issues/910
-import Proto from "@atproto/api";
+import Proto, { RichText } from "@atproto/api";
 import sharp from "sharp";
 import { CommonPostData } from "./types.js";
 const { BskyAgent } = Proto;
@@ -72,8 +72,12 @@ class BskyClient {
         )
     );
 
+    const rt = new RichText({ text: post.text ?? "-" });
+    await rt.detectFacets(this.agent);
+
     await this.agent.post({
-      text: post.text ?? "-", // もし本文が空なら、適当な文字を与える
+      text: rt.text,
+      facets: rt.facets,
       createdAt: post.createdAt.toISO()!,
       langs: ["ja", "ja-JP"],
       embed: {

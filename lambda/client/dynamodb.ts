@@ -5,8 +5,8 @@ import {
   QueryCommandOutput,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { SNSSource } from "./types.js";
 
-type Source = "misskey";
 const PKEY = "sourceSNS";
 
 export class DDBClient {
@@ -19,7 +19,7 @@ export class DDBClient {
     this.table = table;
   }
 
-  async putLastID(id: string, source: Source) {
+  async putLastID(id: string, source: SNSSource) {
     const command = new UpdateCommand({
       TableName: this.table,
       Key: {
@@ -35,7 +35,7 @@ export class DDBClient {
     console.log(response);
   }
 
-  async getLastID(source: Source): Promise<string | undefined> {
+  async getLastID(source: SNSSource): Promise<string | undefined> {
     const command = new QueryCommand({
       TableName: this.table,
       KeyConditionExpression: `${PKEY} = :source`,

@@ -11,17 +11,21 @@ multi-post tool: from misskey.io to bluesky / Twitter
 
 ```bash
 pnpm i
+cp bin/mpost{.sample,}.ts
+# change bin/mpost.ts
 pnpx cdk deploy  --require-approval=never --concurrency 20 --all
-# if you need, set lastID in the DDB table
+# set lastID in the DDB table
 ```
 
 ### set credentials on the SSM Parameter Store
 
 ```ts
 type Credentials = {
+  MISSKEY_USER_ID?: string;
+  MASTODON_USER_ID?: string;
+  MASTODON_ACCESS_TOKEN?: string;
   BSKY_ID: string;
   BSKY_APP_PASS: string;
-  MISSKEY_USER_ID: string;
   TWITTER_API_KEY: string;
   TWITTER_API_SECRET: string;
   TWITTER_ACCESS_TOKEN: string;
@@ -32,5 +36,5 @@ type Credentials = {
 ## local run
 
 ```bash
-DDB_TABLE_NAME="xxx" PARAMSTORE_NAME="xxx" pnpx tsx ./lambda/index.ts
+SOURCE="xxx" DDB_TABLE_NAME="xxx" PARAMSTORE_NAME="xxx" pnpx tsx ./lambda/index.ts
 ```
