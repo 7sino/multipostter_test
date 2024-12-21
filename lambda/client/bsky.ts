@@ -13,6 +13,8 @@ class BskyClient {
   }
 
   isValid = (post: CommonPostData): boolean => {
+    console.log(post);
+
     if (!post.isPublic) {
       console.log(`Post is not public`);
       return false;
@@ -52,9 +54,11 @@ class BskyClient {
 
   post = async (post: CommonPostData) => {
     if (!this.isValid(post)) {
-      throw Error(`Invalid Post`);
+      return;
+      // 稀にisPublic:falseになる。気になるがいったん無視
+      // throw Error(`Invalid Post`);
     }
-    const fileBlobs = await Promise.all(
+    const _fileBlobs = await Promise.all(
       post.files
         .slice(0, 4)
         .map(
@@ -71,6 +75,9 @@ class BskyClient {
           }
         )
     );
+
+    // TODO: 動画以外のファイルもアップロードする
+    const fileBlobs = _fileBlobs.filter((e) => !e.blob.mimeType.startsWith('video/'));
 
     const rt = new RichText({ text: post.text ?? "-" });
     await rt.detectFacets(this.agent);

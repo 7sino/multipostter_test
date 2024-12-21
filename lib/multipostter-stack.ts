@@ -74,6 +74,7 @@ export class MultipostterStack extends cdk.Stack {
         memorySize: 2048,
         runtime: cdk.aws_lambda.Runtime.NODEJS_LATEST,
         timeout: cdk.Duration.seconds(60), // if there are many posts, retry again
+        retryAttempts: 0,
       }
     );
 

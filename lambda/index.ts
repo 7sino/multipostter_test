@@ -74,16 +74,7 @@ const main = async () => {
   const credential = await getSSMCredentials(PARAMSTORE_NAME);
 
   const ddbClient = new DDBClient(DDB_TABLE_NAME);
-  const bskyAgent = await initBsky(
-    credential.BSKY_ID,
-    credential.BSKY_APP_PASS
-  );
-  const twitterAgent = new TwitterClient(
-    credential.TWITTER_API_KEY,
-    credential.TWITTER_API_SECRET,
-    credential.TWITTER_ACCESS_TOKEN,
-    credential.TWITTER_ACCESS_TOKEN_SECRET
-  );
+
   const sourceSinceID = await ddbClient.getLastID(SOURCE);
   if (!sourceSinceID) {
     throw Error("ID is not set in DDB");
@@ -91,12 +82,27 @@ const main = async () => {
 
   const posts = await fetchSourcePosts(SOURCE, credential, sourceSinceID);
   console.log(`process ${posts.length} posts...`);
-  for (const post of posts) {
-    await setTimeout(1000);
-    await bskyAgent.post(post);
-    await twitterAgent.post(post);
-    await ddbClient.putLastID(post.originalID, SOURCE);
-    console.log(post.originalID, post.text);
+
+  // bskyはinitializeをするだけでAPIレートを消費し、スロットリングするので
+  if (posts.length > 0) {
+    const bskyAgent = await initBsky(
+      credential.BSKY_ID,
+      credential.BSKY_APP_PASS
+    );
+    const twitterAgent = new TwitterClient(
+      credential.TWITTER_API_KEY,
+      credential.TWITTER_API_SECRET,
+      credential.TWITTER_ACCESS_TOKEN,
+      credential.TWITTER_ACCESS_TOKEN_SECRET
+    );
+
+    for (const post of posts) {
+      await setTimeout(1000);
+      await bskyAgent.post(post);
+      await twitterAgent.post(post);
+      await ddbClient.putLastID(post.originalID, SOURCE);
+      console.log(post.originalID, post.text);
+    }
   }
 };
 
