@@ -1,41 +1,34 @@
 // https://github.com/bluesky-social/atproto/issues/910
-
-import { SSM } from "@aws-sdk/client-ssm";
-import * as url from "node:url";
-import { setTimeout } from "timers/promises";
+import Proto, { RichText } from "@atproto/api";
+import sharp from "sharp";
+import { CommonPostData, SNSSource } from "./client/types.js";
 import { initBsky } from "./client/bsky.js";
-import { DDBClient } from "./client/dynamodb.js";
 import * as mastodon from "./client/mastodon.js";
 import { fetchMyPosts } from "./client/misskey.js";
 import { TwitterClient } from "./client/twitter.js";
-import { CommonPostData, SNSSource } from "./client/types.js";
+import { setTimeout } from "timers/promises";
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
-type Credentials = {
-  MISSKEY_USER_ID?: string;
-  MASTODON_USER_ID?: string;
-  MASTODON_ACCESS_TOKEN?: string;
-  BSKY_ID: string;
-  BSKY_APP_PASS: string;
-  TWITTER_API_KEY: string;
-  TWITTER_API_SECRET: string;
-  TWITTER_ACCESS_TOKEN: string;
-  TWITTER_ACCESS_TOKEN_SECRET: string;
-};
-
-const getSSMCredentials = async (paramName: string): Promise<Credentials> => {
-  const ssm = new SSM();
-  const response = await ssm.getParameter({
-    Name: paramName,
-    WithDecryption: true,
-  });
-  const credentials: Credentials = JSON.parse(response.Parameter!.Value!);
-  return credentials;
-};
+const MISSKEY_USER_ID = Deno.env.get("MISSKEY_USER_ID");
+const MASTODON_USER_ID = Deno.env.get("MASTODON_USER_ID");
+const MASTODON_ACCESS_TOKEN = Deno.env.get("MASTODON_ACCESS_TOKEN");
+const BSKY_ID = Deno.env.get("BSKY_ID")!;
+const BSKY_APP_PASS = Deno.env.get("BSKY_APP_PASS")!;
+const TWITTER_API_KEY = Deno.env.get("TWITTER_API_KEY")!;
+const TWITTER_API_SECRET = Deno.env.get("TWITTER_API_SECRET")!;
+const TWITTER_ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")!;
+const TWITTER_ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")!;
+const SOURCE = Deno.env.get("SOURCE")! as SNSSource;
+const DDB_TABLE_NAME = Deno.env.get("DDB_TABLE_NAME")!;
 
 const fetchSourcePosts = async (
   source: SNSSource,
-  credential: Credentials,
-  sourceSinceID: string
+  credential: {
+    MISSKEY_USER_ID?: string;
+    MASTODON_USER_ID?: string;
+    MASTODON_ACCESS_TOKEN?: string;
+  },
+  sourceSinceID: string | null
 ): Promise<CommonPostData[]> => {
   if (source === "misskey" && credential.MISSKEY_USER_ID) {
     return await fetchMyPosts(credential.MISSKEY_USER_ID, sourceSinceID);
@@ -55,7 +48,6 @@ const fetchSourcePosts = async (
 };
 
 const main = async () => {
-  const SOURCE = process.env.SOURCE! as SNSSource;
   if (!SOURCE) {
     throw Error("SOURCE is not set");
   }
@@ -63,57 +55,59 @@ const main = async () => {
     throw Error(`Invalid SOURCE: ${SOURCE}`);
   }
 
-  const DDB_TABLE_NAME = process.env.DDB_TABLE_NAME!;
   if (!DDB_TABLE_NAME) {
     throw Error("DDB_TABLE_NAME is not set");
   }
-  const PARAMSTORE_NAME = process.env.PARAMSTORE_NAME!;
-  if (!PARAMSTORE_NAME) {
-    throw Error("PARAMSTORE_NAME is not set");
-  }
-  const credential = await getSSMCredentials(PARAMSTORE_NAME);
 
-  const ddbClient = new DDBClient(DDB_TABLE_NAME);
+  const credential = {
+    MISSKEY_USER_ID,
+    MASTODON_USER_ID,
+    MASTODON_ACCESS_TOKEN,
+  };
 
-  const sourceSinceID = await ddbClient.getLastID(SOURCE);
-  if (!sourceSinceID) {
-    throw Error("ID is not set in DDB");
-  }
+  const kv = await Deno.openKv();
+
+  const getLastID = async (source: SNSSource): Promise<string | null> => {
+    const res = await kv.get<string>([source]);
+    return res.value;
+  };
+
+  const putLastID = async (id: string, source: SNSSource): Promise<void> => {
+    await kv.set([source], id);
+  };
+
+  const sourceSinceID = await getLastID(SOURCE);
 
   const posts = await fetchSourcePosts(SOURCE, credential, sourceSinceID);
   console.log(`process ${posts.length} posts...`);
 
   // bskyはinitializeをするだけでAPIレートを消費し、スロットリングするので
   if (posts.length > 0) {
-    const bskyAgent = await initBsky(
-      credential.BSKY_ID,
-      credential.BSKY_APP_PASS
-    );
+    const bskyAgent = await initBsky(BSKY_ID, BSKY_APP_PASS);
     const twitterAgent = new TwitterClient(
-      credential.TWITTER_API_KEY,
-      credential.TWITTER_API_SECRET,
-      credential.TWITTER_ACCESS_TOKEN,
-      credential.TWITTER_ACCESS_TOKEN_SECRET
+      TWITTER_API_KEY,
+      TWITTER_API_SECRET,
+      TWITTER_ACCESS_TOKEN,
+      TWITTER_ACCESS_TOKEN_SECRET
     );
 
     for (const post of posts) {
       await setTimeout(1000);
       await bskyAgent.post(post);
       await twitterAgent.post(post);
-      await ddbClient.putLastID(post.originalID, SOURCE);
+      await putLastID(post.originalID, SOURCE);
       console.log(post.originalID, post.text);
     }
   }
 };
 
-export const handler = async (event: any) => {
+const handler = async (req: Request): Promise<Response> => {
   await main();
-  return "ok";
+  return new Response("ok");
 };
 
-if (import.meta.url.startsWith("file:")) {
-  const modulePath = url.fileURLToPath(import.meta.url);
-  if (process.argv[1] === modulePath) {
-    await main();
-  }
+serve(handler);
+
+if (import.meta.main) {
+  await main();
 }
